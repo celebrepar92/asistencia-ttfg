@@ -246,8 +246,10 @@
     async function generatePDF() {
     const btn = document.getElementById('genBtn');
     const urlInput = document.getElementById('urlInput');
-    const comisionText = urlInput.options[urlInput.selectedIndex].text;
-    
+    // Extraer solo el código entre paréntesis no, sino el nombre limpio
+    const comisionRaw = urlInput.options[urlInput.selectedIndex].text;
+    const comisionText = comisionRaw.replace(/\s*\(.*?\)\s*/g, '').trim();
+
     btn.innerText = "PROCESANDO..."; btn.disabled = true;
 
     try {
@@ -259,12 +261,14 @@
         const d = dateVal ? new Date(dateVal + "T12:00:00") : new Date();
         const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
-        // Cabecera
-        doc.setFont("courier", "bold"); doc.setFontSize(18);
-        doc.text(`ASISTENCIA TALLER TFG`, 15, 20);
-        doc.setFontSize(10);
-        doc.text(`${comisionText} - ${dateStr}`, 15, 26);
-        doc.setLineWidth(0.5); doc.line(15, 28, 195, 28);
+        // Cabecera más grande
+        doc.setFont("courier", "bold"); doc.setFontSize(22);
+        doc.text(`ASISTENCIA TALLER TFG`, 15, 22);
+
+        doc.setFontSize(13);
+        doc.text(`Comisión ${comisionText} — ${dateStr}`, 15, 30);
+
+        doc.setLineWidth(0.5); doc.line(15, 34, 195, 34);
 
         // QR
         const qrDiv = document.getElementById('qr-hidden'); qrDiv.innerHTML = "";
@@ -274,17 +278,20 @@
         const qrElement = qrDiv.querySelector('canvas') || qrDiv.querySelector('img');
         if (!qrElement) throw new Error("QR no renderizó");
         const qrData = qrElement.tagName === 'CANVAS' ? qrElement.toDataURL("image/png") : qrElement.src;
-        doc.addImage(qrData, 'PNG', 70, 35, 70, 70);
+        doc.addImage(qrData, 'PNG', 70, 40, 70, 70);
 
         // URL debajo del QR
         doc.setFont("courier", "normal"); doc.setFontSize(7);
-        doc.text(url, 105, 108, { align: 'center' });
+        doc.text(url, 105, 114, { align: 'center' });
 
         // Fecha y hora de generación
         const now = new Date();
         const genStr = `Generado: ${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         doc.setFontSize(8);
-        doc.text(genStr, 105, 114, { align: 'center' });
+        doc.text(genStr, 105, 120, { align: 'center' });
+
+        // Separador antes de la obra
+        doc.setLineWidth(0.3); doc.line(40, 126, 170, 126);
 
         // Arte
         let artData = null; let finalImgSource = null;
@@ -306,19 +313,19 @@
         if (finalImgSource) {
             const processed = await processImg(finalImgSource);
             if (processed) {
-                const maxH = 110; const maxW = 175;
+                const maxH = 105; const maxW = 175;
                 let imgH = maxH; let imgW = imgH / processed.ratio;
                 if (imgW > maxW) { imgW = maxW; imgH = imgW * processed.ratio; }
-                const imgY = 122;
+                const imgY = 130;
                 doc.addImage(processed.data, 'JPEG', (210 - imgW) / 2, imgY, imgW, imgH);
 
-                // Título en negrita
-                doc.setFont("courier", "bold"); doc.setFontSize(11);
-                doc.text(artData.title.toUpperCase(), 105, imgY + imgH + 8, { align: 'center' });
+                // Título en negrita y mayúsculas
+                doc.setFont("courier", "bold"); doc.setFontSize(12);
+                doc.text(artData.title.toUpperCase(), 105, imgY + imgH + 9, { align: 'center' });
 
-                // Artista y año
+                // Artista y año en mayúsculas
                 doc.setFont("courier", "normal"); doc.setFontSize(9);
-                doc.text(`${artData.artist} (${artData.date})`, 105, imgY + imgH + 15, { align: 'center' });
+                doc.text(`ARTISTA: ${artData.artist.toUpperCase()} | AÑO: ${artData.date}`, 105, imgY + imgH + 16, { align: 'center' });
             }
         }
 
