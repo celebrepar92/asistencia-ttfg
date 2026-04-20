@@ -244,83 +244,93 @@
     function getFileData(file) { return new Promise((resolve) => { const reader = new FileReader(); reader.onload = (e) => resolve(e.target.result); reader.readAsDataURL(file); }); }
 
     async function generatePDF() {
-        const btn = document.getElementById('genBtn');
-        const urlInput = document.getElementById('urlInput');
-        const comisionText = urlInput.options[urlInput.selectedIndex].text; // Obtiene el nombre (ej: RF-INV)
+    const btn = document.getElementById('genBtn');
+    const urlInput = document.getElementById('urlInput');
+    const comisionText = urlInput.options[urlInput.selectedIndex].text;
+    
+    btn.innerText = "PROCESANDO..."; btn.disabled = true;
+
+    try {
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
         
-        btn.innerText = "PROCESANDO..."; btn.disabled = true;
+        const url = urlInput.value;
+        const dateVal = document.getElementById('dateInput').value;
+        const d = dateVal ? new Date(dateVal + "T12:00:00") : new Date();
+        const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
-        try {
-            const { jsPDF } = window.jspdf; 
-            const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-            
-            const url = urlInput.value;
-            const dateVal = document.getElementById('dateInput').value;
-            const d = dateVal ? new Date(dateVal + "T12:00:00") : new Date();
-            const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        // Cabecera
+        doc.setFont("courier", "bold"); doc.setFontSize(18);
+        doc.text(`ASISTENCIA TALLER TFG`, 15, 20);
+        doc.setFontSize(10);
+        doc.text(`${comisionText} - ${dateStr}`, 15, 26);
+        doc.setLineWidth(0.5); doc.line(15, 28, 195, 28);
 
-            // Cabecera con Comisión
-            doc.setFont("courier", "bold"); doc.setFontSize(18);
-            doc.text(`ASISTENCIA TALLER TFG`, 15, 20);
-            doc.setFontSize(10);
-            doc.text(`${comisionText} - ${dateStr}`, 15, 26);
-            
-            const identicon = await processImg(`https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(url)}&backgroundColor=ffffff`);
-            if (identicon) doc.addImage(identicon.data, 'JPEG', 183, 8, 12, 12);
-            doc.setLineWidth(0.5); doc.line(15, 28, 195, 28);
+        // QR
+        const qrDiv = document.getElementById('qr-hidden'); qrDiv.innerHTML = "";
+        new QRCode(qrDiv, { text: url, width: 400, height: 400, colorDark: "#000" });
+        await new Promise(r => setTimeout(r, 1000));
+        
+        const qrElement = qrDiv.querySelector('canvas') || qrDiv.querySelector('img');
+        if (!qrElement) throw new Error("QR no renderizó");
+        const qrData = qrElement.tagName === 'CANVAS' ? qrElement.toDataURL("image/png") : qrElement.src;
+        doc.addImage(qrData, 'PNG', 70, 35, 70, 70);
 
-            // QR Robusto (Detecta canvas o img)
-            const qrDiv = document.getElementById('qr-hidden'); qrDiv.innerHTML = "";
-            new QRCode(qrDiv, { text: url, width: 400, height: 400, colorDark: "#000" });
+        // URL debajo del QR
+        doc.setFont("courier", "normal"); doc.setFontSize(7);
+        doc.text(url, 105, 108, { align: 'center' });
 
-            await new Promise(r => setTimeout(r, 1000)); // más tiempo
+        // Fecha y hora de generación
+        const now = new Date();
+        const genStr = `Generado: ${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        doc.setFontSize(8);
+        doc.text(genStr, 105, 114, { align: 'center' });
 
-            const qrElement = qrDiv.querySelector('canvas') || qrDiv.querySelector('img');
-            if (!qrElement) throw new Error("QR no renderizó");
-            const qrData = qrElement.tagName === 'CANVAS' 
-                ? qrElement.toDataURL("image/png") 
-                : qrElement.src;
-            if (!qrData || qrData === 'data:,') throw new Error("QR vacío");
-            doc.addImage(qrData, 'PNG', 70, 35, 70, 70);
+        // Arte
+        let artData = null; let finalImgSource = null;
+        const fileInput = document.getElementById('fileInput');
+        const customUrl = document.getElementById('customImgUrl').value;
 
-            // Arte
-            let artData = null; let finalImgSource = null;
-            const fileInput = document.getElementById('fileInput');
-            const customUrl = document.getElementById('customImgUrl').value;
-
-            if (fileInput.files[0]) {
-                finalImgSource = await getFileData(fileInput.files[0]);
-                artData = { title: document.getElementById('customTitle').value || "Sin Título", artist: document.getElementById('customArtist').value || "Desconocido", date: document.getElementById('customYear').value || "s/f", ref: "LOCAL" };
-            } else if (customUrl) {
-                finalImgSource = customUrl;
-                artData = { title: document.getElementById('customTitle').value || "Sin Título", artist: document.getElementById('customArtist').value || "Desconocido", date: document.getElementById('customYear').value || "s/f", ref: "URL" };
-            } else {
-                artData = (Math.random() > 0.5) ? await fetchAIC() : await fetchTheMet();
-                artData.title = await translateTitle(artData.title);
-                finalImgSource = artData.img;
-            }
-
-            if (finalImgSource) {
-                const processed = await processImg(finalImgSource);
-                if (processed) {
-                    const maxH = 110; const maxW = 180;
-                    let imgH = maxH; let imgW = imgH / processed.ratio;
-                    if (imgW > maxW) { imgW = maxW; imgH = imgW * processed.ratio; }
-                    doc.addImage(processed.data, 'JPEG', (210 - imgW) / 2, 130, imgW, imgH);
-                    doc.setFontSize(10); 
-                    doc.text(doc.splitTextToSize(artData.title.toUpperCase(), 160), 105, 130 + imgH + 10, { align: 'center' });
-                }
-            }
-            // Guardar con nombre de comisión
-            const fileName = `ASISTENCIA_${comisionText.split(' ')[0]}_${dateStr.replace(/\//g, '-')}.pdf`;
-            doc.save(fileName);
-        } catch (err) {
-            console.error(err);
-            alert("Error generando PDF. Intenta de nuevo.");
-        } finally {
-            btn.innerText = "Descargar PDF"; btn.disabled = false;
+        if (fileInput.files[0]) {
+            finalImgSource = await getFileData(fileInput.files[0]);
+            artData = { title: document.getElementById('customTitle').value || "Sin Título", artist: document.getElementById('customArtist').value || "Desconocido", date: document.getElementById('customYear').value || "s/f" };
+        } else if (customUrl) {
+            finalImgSource = customUrl;
+            artData = { title: document.getElementById('customTitle').value || "Sin Título", artist: document.getElementById('customArtist').value || "Desconocido", date: document.getElementById('customYear').value || "s/f" };
+        } else {
+            artData = (Math.random() > 0.5) ? await fetchAIC() : await fetchTheMet();
+            artData.title = await translateTitle(artData.title);
+            finalImgSource = artData.img;
         }
+
+        if (finalImgSource) {
+            const processed = await processImg(finalImgSource);
+            if (processed) {
+                const maxH = 110; const maxW = 175;
+                let imgH = maxH; let imgW = imgH / processed.ratio;
+                if (imgW > maxW) { imgW = maxW; imgH = imgW * processed.ratio; }
+                const imgY = 122;
+                doc.addImage(processed.data, 'JPEG', (210 - imgW) / 2, imgY, imgW, imgH);
+
+                // Título en negrita
+                doc.setFont("courier", "bold"); doc.setFontSize(11);
+                doc.text(artData.title.toUpperCase(), 105, imgY + imgH + 8, { align: 'center' });
+
+                // Artista y año
+                doc.setFont("courier", "normal"); doc.setFontSize(9);
+                doc.text(`${artData.artist} (${artData.date})`, 105, imgY + imgH + 15, { align: 'center' });
+            }
+        }
+
+        const fileName = `ASISTENCIA_${comisionText.split(' ')[0]}_${dateStr.replace(/\//g, '-')}.pdf`;
+        doc.save(fileName);
+    } catch (err) {
+        console.error(err);
+        alert("Error generando PDF. Intenta de nuevo.");
+    } finally {
+        btn.innerText = "Descargar PDF"; btn.disabled = false;
     }
+}
 </script>
 
 <div id="qr-hidden" style="display:none;"></div>
