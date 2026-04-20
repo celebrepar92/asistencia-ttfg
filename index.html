@@ -6,6 +6,21 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="icon" href="favicon.png" type="image/png">
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    <script>
+    netlifyIdentity.on('init', user => {
+        if (!user) {
+            document.getElementById("adminPanel").style.display = "none";
+        } else {
+            document.getElementById("adminPanel").style.display = "block";
+            checkStatus();
+        }
+        });
+
+        netlifyIdentity.on('login', user => {
+        location.reload(); // Recarga para mostrar el contenido al entrar
+        });
+        </script>
     <style>
         body { font-family: 'Courier New', Courier, monospace; background: #f4f4f4; display: flex; justify-content: center; padding: 20px; }
         .config-panel { border: 2px solid #000; padding: 30px; width: 450px; background: #fff; box-shadow: 10px 10px 0px #000; }
@@ -22,9 +37,13 @@
     </style>
 </head>
 <body>
-
+    <div data-netlify-identity-button></div>
+    <div id="adminPanel" style="display: none;">
     <div class="config-panel">
-        <h1>NEXUS - Asistencia TTFG</h1>
+        <h1 style="margin-bottom:0px !important;">NEXUS - Asistencia TTFG</h1>
+        <button id="testModeBtn" id="genBtn" class="btn btn-off" onclick="toggleMode()">Cargando estado...</button>
+
+        <br><br>
         
         <div class="group">
             <label>Tipo de formulario (link)</label>
@@ -75,6 +94,8 @@
     <div id="qr-hidden"></div>
     <canvas id="temp-canvas"></canvas>
 
+
+    </div>
     <script>
         async function translateTitle(text) {
             try {
@@ -256,6 +277,62 @@
             btn.innerText = "Generar PDF";
             btn.disabled = false;
         }
+
+        // ACTIVAR Y DESACTIVAR TEST MODE
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyCz0xuSeFIHzZSUrKketDJPbPGUF4BGs2bVbCU2LcqgHFyQW-udbmE_l-UGLAHjfE7hQ/exec"; // <--- PEGA TU URL AQUÍ
+        const btn = document.getElementById('testModeBtn');
+
+  async function checkStatus() {
+    try {
+      // Usamos 'cors' explícitamente
+      const response = await fetch(WEB_APP_URL, {
+        method: 'GET',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      
+      const data = await response.json();
+      updateButtonUI(data.testMode);
+    } catch (err) {
+      console.error("Error al cargar:", err);
+      btn.innerText = "Error (Mira la consola F12)";
+    }
+  }
+
+  async function toggleMode() {
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    btn.innerText = "Cambiando...";
+    
+    try {
+      // IMPORTANTE: Agregamos el parámetro toggle
+      const response = await fetch(`${WEB_APP_URL}?action=toggle`, {
+        method: 'GET',
+        mode: 'cors'
+      });
+      const data = await response.json();
+      updateButtonUI(data.testMode);
+    } catch (err) {
+      console.error("Error al cambiar:", err);
+      alert("No se pudo cambiar el modo. Revisa la consola.");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function updateButtonUI(isTestMode) {
+    if (isTestMode) {
+      btn.innerText = "DESACTIVAR ASISTENCIA";
+      btn.style.backgroundColor = "#880808"; // Rojo
+    } else {
+      btn.innerText = "ACTIVAR ASISTENCIA";
+      btn.style.backgroundColor = "#008000"; // Verde
+    }
+  }
+
+  // Ejecutar al cargar
+  checkStatus();
     </script>
 </body>
 </html>
